@@ -1,0 +1,146 @@
+server.js:
+const express = require('express');
+const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const path = require('path');
+const app = express();
+const PORT = 3000;
+// Middleware
+app.use(bodyParser.json());
+app.use(cors());
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files
+// MongoDB Connection
+mongoose.connect('mongodb://localhost:27017/employeeDB', { useNewUrlParser: true, useUnifiedTopology: true })
+.then(() => console.log('MongoDB Connected'))
+.catch(err => console.log(err));
+// Employee Schema
+const employeeSchema = new mongoose.Schema({
+emp_id: { type: String, required: true, unique: true },
+emp_name: String,
+department: String
+});
+const Employee = mongoose.model('Employee', employeeSchema);
+// CRUD Routes
+app.post('/employees', async (req, res) => {
+try {
+const employee = new Employee(req.body);
+await employee.save();
+res.status(201).send(employee);
+} catch (error) {
+res.status(400).send(error);
+}
+});
+app.get('/employees', async (req, res) => {
+const employees = await Employee.find();
+res.send(employees);
+});
+app.get('/employees/:id', async (req, res) => {
+const employee = await Employee.findById(req.params.id);
+if (employee) res.send(employee);
+else res.status(404).send({ error: 'Employee not found' });
+});
+app.put('/employees/:id', async (req, res) => {
+const employee = await Employee.findByIdAndUpdate(req.params.id, req.body, { new: true });
+if (employee) res.send(employee);
+else res.status(404).send({ error: 'Employee not found' });
+});
+app.delete('/employees/:id', async (req, res) => {
+const employee = await Employee.findByIdAndDelete(req.params.id);
+if (employee) res.send(employee);
+else res.status(404).send({ error: 'Employee not found' });
+});
+// Serve index.html on root route
+app.get('/', (req, res) => {
+res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.listen(PORT, () => {
+console.log(`Server is running on http://localhost:${PORT}`);
+});
+Index.html:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employee Management</title>
+</head>
+<body>
+<h1>Employee Management</h1>
+<form id="employeeForm">
+<input type="hidden" id="employeeId">
+<input type="text" id="empId" placeholder="Employee ID" required>
+<input type="text" id="empName" placeholder="Employee Name" required>
+<input type="text" id="department" placeholder="Department" required>
+<button type="submit">Save</button>
+</form>
+<h2>Employee List</h2>
+<table border="1">
+<thead>
+<tr>
+<th>Employee ID</th>
+<th>Name</th>
+<th>Department</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="employeeList"></tbody>
+</table>
+<script>
+const apiUrl = 'http://localhost:3000/employees';
+async function fetchEmployees() {
+const response = await fetch(apiUrl);
+const employees = await response.json();
+const employeeList = document.getElementById('employeeList');
+employeeList.innerHTML = employees.map(emp => `
+<tr>
+<td>${emp.emp_id}</td>
+<td>${emp.emp_name}</td>
+<td>${emp.department}</td>
+<td>
+<button onclick="editEmployee('${emp._id}')">Edit</button>
+<button onclick="deleteEmployee('${emp._id}')">Delete</button>
+</td>
+</tr>
+`).join('');
+}
+async function addOrUpdateEmployee(event) {
+event.preventDefault();
+const id = document.getElementById('employeeId').value;
+const empId = document.getElementById('empId').value;
+const empName = document.getElementById('empName').value;
+const department = document.getElementById('department').value;
+const employeeData = { emp_id: empId, emp_name: empName, department: department };
+if (id) {
+await fetch(`${apiUrl}/${id}`, { // Corrected with backticks
+method: 'PUT',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(employeeData)
+});
+} else {
+await fetch(apiUrl, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(employeeData)
+});
+}
+document.getElementById('employeeForm').reset();
+fetchEmployees();
+}
+async function editEmployee(id) {
+const response = await fetch(`${apiUrl}/${id}`); // Corrected with backticks
+const employee = await response.json();
+document.getElementById('employeeId').value = employee._id;
+document.getElementById('empId').value = employee.emp_id;
+document.getElementById('empName').value = employee.emp_name;
+document.getElementById('department').value = employee.department;
+}
+async function deleteEmployee(id) {
+await fetch(`${apiUrl}/${id}`, { method: 'DELETE' }); // Corrected with backticks
+fetchEmployees();
+}
+document.getElementById('employeeForm').addEventListener('submit', addOrUpdateEmployee);
+fetchEmployees();
+</script>
+</body>
+</html>
